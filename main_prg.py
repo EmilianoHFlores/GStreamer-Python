@@ -23,21 +23,20 @@ class mainStreamClass:
         self.active_track = False
         self.camlink = "rtsp://localhost:8554/parque-central-cam-2" #Add your RTSP cam link
         self.framerate = 20
+        
+        # recovery
+        # time in seconds waiting for stream to start
+        self.timeout = 60
     
     def startMain(self):
-
-        #set  queue size
-        self.cam_queue = mp.Queue(maxsize=100)
 
         #get all cams
         time.sleep(3)
 
-        self.stopbit = mp.Event()
-        self.camProcess = vs.StreamCapture(self.camlink,
-                             self.stopbit,
-                             self.cam_queue,
-                            self.framerate)
-        self.camProcess.start()
+        #start cam stream
+        self.startCamStream()
+        print('Waiting for stream to start...')
+        self.waitForStream(timeout=self.timeout)
 
         # calculate FPS
         lastFTime = time.time()
@@ -45,10 +44,8 @@ class mainStreamClass:
         error_count = 0 
         had_error = False
         
-        while self.camProcess.is_stream_active() == False:
-            print('Waiting for stream to start')
-            time.sleep(1)
         print("Stream is active")
+        
         try:
             while True:
 
@@ -77,14 +74,15 @@ class mainStreamClass:
                             cv2.waitKey(1)
                 elif self.camProcess.is_stream_active() == False:
                     print('Cam is not active')
-                    had_error = True
-                    error_count += 1
-                    error_time = time.time()
+                    if not had_error:
+                        error_time = time.time()
+                        had_error = True
+                        error_count += 1
                     time.sleep(5)
-                    self.restartCamStream()
-                    while self.camProcess.is_stream_active() == False:
-                        print('Waiting for stream to start')
-                        time.sleep(1)
+                    self.stopCamStream()
+                    self.startCamStream()
+                    print("Waiting for stream to restart...")
+                    self.waitForStream(timeout=self.timeout)
 
         except KeyboardInterrupt:
             print('Caught Keyboard interrupt')
@@ -99,7 +97,7 @@ class mainStreamClass:
 
 
     def stopCamStream(self):
-        print('in stopCamStream')
+        # print('in stopCamStream')
 
         if self.stopbit is not None:
             self.stopbit.set()
@@ -112,21 +110,23 @@ class mainStreamClass:
 
             self.camProcess.join()
     
-    def restartCamStream(self):
-        print('in restartCamStream')
-        self.stopCamStream()
-        
-        self.stopbit = mp.Event()
+    def startCamStream(self):
+        #set  queue size
         self.cam_queue = mp.Queue(maxsize=100)
+        self.stopbit = mp.Event()
         self.camProcess = vs.StreamCapture(self.camlink,
                              self.stopbit,
                              self.cam_queue,
                             self.framerate)
         self.camProcess.start()
-    
-    def resumeCamStream(self):
-        print('in resumeCamStream')
-        #unset stopbit
+        
+    def waitForStream(self, timeout=30):
+        startTime = time.time()
+        while self.camProcess.is_stream_active() == False and time.time() - startTime < timeout:
+            time.sleep(2)
+        if time.time() - startTime >= timeout:
+            return False
+        return True
 
 
 if __name__ == "__main__":
