@@ -28,7 +28,7 @@ class StreamCommands(Enum):
 
 class StreamCapture(mp.Process):
 
-    def __init__(self, link, stop, outQueue, framerate):
+    def __init__(self, link, stop, outQueue, framerate, verbose=False):
         """
         Initialize the stream capturing process
         link - rstp link of stream
@@ -52,8 +52,10 @@ class StreamCapture(mp.Process):
         self.newImage = False
         self.frame1 = None
         self.frame2 = None
-        self.num_unexpected_tot = 40
+        self.num_unexpected_tot = 150
         self.unexpected_cnt = 0
+        
+        self.verbose = verbose
 
 
 
@@ -82,7 +84,7 @@ class StreamCapture(mp.Process):
         return Gst.FlowReturn.OK
 
     def run(self):
-        print("Starting CAM Stream")
+        if self.verbose: print("Starting CAM Stream")
         self.active_track.value = True
         # Create the empty pipeline
         self.pipeline = Gst.parse_launch(
@@ -145,7 +147,7 @@ class StreamCapture(mp.Process):
         self.sink.set_property('caps', caps)
 
         if not self.source or not self.sink or not self.pipeline or not self.decode or not self.convert:
-            print("Not all elements could be created.")
+            if self.verbose: ("Not all elements could be created.")
             self.stop.set()
 
         self.sink.connect("new-sample", self.new_buffer, self.sink)
@@ -153,7 +155,7 @@ class StreamCapture(mp.Process):
         # Start playing
         ret = self.pipeline.set_state(Gst.State.PLAYING)
         if ret == Gst.StateChangeReturn.FAILURE:
-            print("Unable to set the pipeline to the playing state.")
+            if self.verbose: print("Unable to set the pipeline to the playing state.")
             self.stop.set()
 
         # Wait until error or EOS
@@ -162,7 +164,7 @@ class StreamCapture(mp.Process):
         while True:
 
             if self.stop.is_set():
-                print('Stopping CAM Stream by main process')
+                if self.verbose: print('Stopping CAM Stream by main process')
                 break
 
             message = bus.timed_pop_filtered(10000, Gst.MessageType.ANY)
@@ -180,20 +182,21 @@ class StreamCapture(mp.Process):
             if message:
                 if message.type == Gst.MessageType.ERROR:
                     err, debug = message.parse_error()
-                    print("Error received from element %s: %s" % (
-                        message.src.get_name(), err))
-                    print("Debugging information: %s" % debug)
+                    if self.verbose: 
+                        print("Error received from element %s: %s" % (
+                            message.src.get_name(), err))
+                        print("Debugging information: %s" % debug)
                     break
                 elif message.type == Gst.MessageType.EOS:
-                    print("End-Of-Stream reached.")
+                    if self.verbose: print("End-Of-Stream reached.")
                     break
                 elif message.type == Gst.MessageType.STATE_CHANGED:
                     if isinstance(message.src, Gst.Pipeline):
                         old_state, new_state, pending_state = message.parse_state_changed()
-                        print("Pipeline state changed from %s to %s." %
+                        if self.verbose: print("Pipeline state changed from %s to %s." %
                               (old_state.value_nick, new_state.value_nick))
                 else:
-                    print("Unexpected message received.")
+                    if self.verbose: print("Unexpected message received.")
                     self.unexpected_cnt = self.unexpected_cnt + 1
                     if self.unexpected_cnt == self.num_unexpected_tot:
                         break
