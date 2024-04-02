@@ -9,6 +9,7 @@ import time
 import vid_streamv3 as vs
 import cv2
 import sys
+import numpy as np
 
 '''
 Main class
@@ -23,6 +24,9 @@ class mainStreamClass:
         self.active_track = False
         self.camlink = "rtsp://localhost:8554/parque-central-cam-2" #Add your RTSP cam link
         self.framerate = 20
+        
+        self.video_height = 480
+        self.video_width = 640
         
         # recovery
         # time in seconds waiting for stream to start
@@ -74,6 +78,10 @@ class mainStreamClass:
                             cv2.waitKey(1)
                 elif self.camProcess.is_stream_active() == False:
                     print('Cam is not active')
+                    # display blank frame
+                    frame = np.zeros((self.video_height, self.video_width, 3), np.uint8)
+                    cv2.imshow('Cam: ' + self.camlink, frame)
+                    cv2.waitKey(1)
                     if not had_error:
                         error_time = time.time()
                         had_error = True
