@@ -41,6 +41,7 @@ class StreamCapture(mp.Process):
         self.stop = stop
         self.outQueue = outQueue
         self.framerate = framerate
+        self.active_track = mp.Value('b', False)
         self.currentState = StreamMode.INIT_STREAM
         self.pipeline = None
         self.source = None
@@ -81,6 +82,8 @@ class StreamCapture(mp.Process):
         return Gst.FlowReturn.OK
 
     def run(self):
+        print("Starting CAM Stream")
+        self.active_track.value = True
         # Create the empty pipeline
         self.pipeline = Gst.parse_launch(
             'rtspsrc name=m_rtspsrc ! rtph264depay name=m_rtph264depay ! avdec_h264 name=m_avdech264 ! videoconvert name=m_videoconvert ! videorate name=m_videorate ! appsink name=m_appsink')
@@ -167,7 +170,6 @@ class StreamCapture(mp.Process):
             if self.image_arr is not None and self.newImage is True:
 
                 if not self.outQueue.full():
-
                     # print("\r adding to queue of size{}".format(self.outQueue.qsize()), end='\r')
                     self.outQueue.put((StreamCommands.FRAME, self.image_arr), block=False)
 
@@ -198,5 +200,9 @@ class StreamCapture(mp.Process):
 
 
         print('terminating cam pipe')
+        self.active_track.value = False
         self.stop.set()
         self.pipeline.set_state(Gst.State.NULL)
+    
+    def is_stream_active(self):
+        return self.active_track.value
